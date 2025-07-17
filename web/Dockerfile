@@ -12,5 +12,5 @@ RUN dotnet publish -o out
 FROM mcr.microsoft.com/dotnet/aspnet:8.0@sha256:35095f3e2bf5ab1f0c6953ed1364028343b5aef029932454cf2ce9e9680827d8
 WORKDIR /App
 COPY --from=build /App/out .
-EXPOSE 80
+EXPOSE 8000
 ENTRYPOINT ["dotnet", "web.dll"]
