@@ -1,0 +1,135 @@
+﻿@page "/"
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.Identity.Web
+@using web.Components.Shared
+@inject IHttpClientFactory HttpClientFactory
+@inject ITokenAcquisition TokenAcquisition
+@inject IConfiguration Configuration
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<title>Globalmantics</title>
+
+<section class="section-details">
+    <div class="details-left"></div>
+    <div class="details-right">
+        <h2>Welcome to Globalmantics Books!</h2>
+            @if (isAuthenticated)
+            {
+                <p>Check out our latest title below!</p>
+            }
+            else
+            {
+                <p>Sign in to access our full book catalog and discover your next great read.</p>
+            }
+        </div>
+    </section>
+    
+    @if (isAuthenticated)
+    {
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <section class="section-details">
+                <div class="details-right">
+                    <div class="alert alert-danger">@errorMessage</div>
+                </div>
+            </section>
+        }
+        else if (isLoading)
+        {
+            <section class="section-details">
+                <div class="details-right">
+                    <p><em>Loading latest book...</em></p>
+                </div>
+            </section>
+        }
+        else if (latestBook != null)
+        {
+            <section class="section-details">
+                <div class="details-left">
+                    <img class="book-image-details" src="img/@latestBook.Image" alt="@latestBook.Title" />
+                </div>
+                <div class="details-right">
+                    <h2>@latestBook.Title</h2>
+                    <div class="book-author">@latestBook.Author</div>
+                    <div class="book-date">Published: @latestBook.Published</div>
+                    <div class="book-description">@latestBook.Synopsis</div>
+                    <div class="book-price-container">
+                        <div class="book-price">$@latestBook.Price</div>
+                        <div class="book-purchase-button">
+                            <a href="details/@latestBook.Id"><button>More Info</button></a>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        }
+    }
+
+@code {
+    // Local Book model definition
+    public class Book
+    {
+        public int Id { get; set; }
+        public string Title { get; set; } = string.Empty;
+        public string Author { get; set; } = string.Empty;
+        public string Image { get; set; } = string.Empty;
+        public string Synopsis { get; set; } = string.Empty;
+        public int Published { get; set; }
+        public decimal Price { get; set; }
+    }
+
+    private Book? latestBook;
+    private bool isLoading = false;
+    private string? errorMessage;
+    private bool isAuthenticated = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        isAuthenticated = authState.User.Identity?.IsAuthenticated ?? false;
+
+        if (isAuthenticated)
+        {
+            await LoadLatestBookAsync();
+        }
+    }
+
+    private async Task LoadLatestBookAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        
+        try
+        {
+            // Get the token for the Books API
+            string[] scopes = { Configuration["BooksApi:Scopes"]?.Split(' ')[0]};
+            string accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
+
+            // Create the HTTP client
+            var client = HttpClientFactory.CreateClient("BooksApi");
+            
+            // Add the token to the request
+            client.DefaultRequestHeaders.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            
+            // Get the books from the API and take the latest one
+            var books = await client.GetFromJsonAsync<List<Book>>("/books");
+            latestBook = books?.OrderByDescending(b => b.Published).FirstOrDefault();
+        }
+        catch (HttpRequestException ex)
+        {
+            latestBook = null;
+            errorMessage = $"Could not load books: {ex.Message}";
+        }
+        catch (Exception ex)
+        {
+            latestBook = null;
+            errorMessage = $"Unexpected error: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}
+

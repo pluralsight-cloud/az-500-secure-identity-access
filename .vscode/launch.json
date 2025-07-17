@@ -1,0 +1,19 @@
+{
+  "configurations": [
+    {
+      "name": ".NET Core Attach",
+      "type": "coreclr",
+      "request": "attach"
+    },
+    {
+      "name": "C#: Stock Keeper Debug",
+      "type": "coreclr",
+      "request": "launch",
+      "program": "${workspaceFolder}/stock-keeper/bin/Debug/net8.0/stock-keeper.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/stock-keeper",
+      "stopAtEntry": false,
+      "console": "integratedTerminal"
+    }
+  ]
+}

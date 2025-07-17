@@ -1,0 +1,50 @@
+@using System.Security.Claims
+
+<header>
+    <a href="/"><h1><img src="img/globalmantics-logo-white.png" /></h1></a>
+    <div class="navigation-button">
+        <a href="/"><button>Home</button></a>
+    </div>
+    
+    <CascadingAuthenticationState>
+        <AuthorizeView>
+            <Authorized>
+                <div class="navigation-button">
+                    <a href="/catalog"><button>Catalog</button></a>
+                </div>
+            </Authorized>
+        </AuthorizeView>
+    </CascadingAuthenticationState>
+    
+    <div class="header-cart">
+        <img src="img/cart.svg" />
+        <p><span>0</span> books</p>
+    </div>
+    <div class="header-auth">
+        <CascadingAuthenticationState>
+            <AuthorizeView>
+                <Authorized Context="authState">
+                    <a href="/profile" class="header-profile-link">Hello, @GetDisplayName(authState.User)!</a>
+                    <a href="/MicrosoftIdentity/Account/SignOut">Sign out</a>
+                </Authorized>
+                <NotAuthorized>
+                    <a href="/MicrosoftIdentity/Account/SignIn">Sign in</a>
+                </NotAuthorized>
+            </AuthorizeView>
+        </CascadingAuthenticationState>
+    </div>
+</header>
+
+@code {
+    private string GetDisplayName(ClaimsPrincipal user)
+    {
+        // Prefer 'name' claim if present
+        var displayName = user.FindFirst("name")?.Value;
+        if (!string.IsNullOrEmpty(displayName))
+        {
+            return displayName;
+        }
+        // Fallback to UPN or Name
+        return user.Identity?.Name ?? "User";
+    }
+}

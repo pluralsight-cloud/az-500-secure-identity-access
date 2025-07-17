@@ -1,0 +1,359 @@
+@page "/profile"
+@rendermode @(new InteractiveServerRenderMode())
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Components.Web
+@using Microsoft.AspNetCore.Authorization
+@using System.Net.Http.Json
+@using System.Net.Http.Headers
+@using Microsoft.Identity.Web
+@using System.Text.Json
+@using System.ComponentModel.DataAnnotations
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject ITokenAcquisition TokenAcquisition
+@inject IHttpClientFactory HttpClientFactory
+@inject NavigationManager Navigation
+
+<PageTitle>Profile - Globalmantics Books</PageTitle>
+
+<section class="section-details">
+    <div class="details-left">
+        <a href="/"><button>Back</button></a>
+    </div>
+    <div class="details-right">
+        <h2>User Profile</h2>
+        
+        <AuthorizeView>
+            <Authorized>
+                @if (successMessage != null)
+                {
+                    <div class="alert alert-success">@successMessage</div>
+                }
+                @if (errorMessage != null)
+                {
+                    <div class="alert alert-danger">@errorMessage</div>
+                }
+                @if (isLoading)
+                {
+                    <div class="loading">Loading...</div>
+                }
+                else if (userProfile != null)
+                {
+                    <EditForm Model="@formModel" OnValidSubmit="UpdateProfile" FormName="profile-update-form" Context="formContext">
+                        <DataAnnotationsValidator />
+                        <ValidationSummary />
+                        
+                        <div class="form-grid">
+                            <div class="form-group">
+                                <label for="givenName">First Name</label>
+                                <InputText id="givenName" @bind-Value="formModel!.GivenName" />
+                            </div>
+                            <div class="form-group">
+                                <label for="surname">Last Name</label>
+                                <InputText id="surname" @bind-Value="formModel!.Surname" />
+                            </div>
+                        </div>
+                        
+                        <div class="form-actions">
+                            <button type="submit">Save</button>
+                        </div>
+                    </EditForm>
+                }
+                else
+                {
+                    <div class="alert alert-warning">Unable to load user profile data.</div>
+                }
+            </Authorized>
+            <NotAuthorized>
+                <div class="alert alert-warning">
+                    You need to <a href="/MicrosoftIdentity/Account/SignIn">sign in</a> to access this page.
+                </div>
+            </NotAuthorized>
+        </AuthorizeView>
+    </div>
+</section>
+
+@code {
+    private UserProfile? userProfile;
+    private ProfileFormModel? formModel;
+    private bool isLoading = true;
+    private string? errorMessage;
+    private string? successMessage;
+
+    public class ProfileFormModel
+    {
+        public string GivenName { get; set; } = string.Empty;
+        public string Surname { get; set; } = string.Empty;
+        public string Mail { get; set; } = string.Empty;
+    }
+
+    public class UserProfile
+    {
+        public string? Id { get; set; }
+        public string? DisplayName { get; set; }
+        public string? GivenName { get; set; }
+        public string? Surname { get; set; }
+        public string? Mail { get; set; }
+        public string? UserPrincipalName { get; set; }
+        public string? MobilePhone { get; set; }
+        public string[]? BusinessPhones { get; set; }
+        public string? JobTitle { get; set; }
+        public string? Department { get; set; }
+        public string? OfficeLocation { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var user = authState.User;
+            
+            if (user.Identity?.IsAuthenticated != true)
+            {
+                isLoading = false;
+                return;
+            }
+
+            await LoadUserProfile();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error loading profile: {ex.Message}";
+            Console.WriteLine($"[Profile] Error in OnInitializedAsync: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadUserProfile()
+    {
+        try
+        {
+            // Simplify to just User.Read which should be sufficient for reading profile
+            string[] scopes = { "User.Read" };
+            
+            // Create HTTP client for Graph API
+            var httpClient = HttpClientFactory.CreateClient();
+            
+            // Get access token for Graph API with proper error handling
+            string accessToken;
+            try
+            {
+                accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
+                Console.WriteLine("[Profile] Successfully acquired token for reading profile");
+            }
+            catch (MicrosoftIdentityWebChallengeUserException ex)
+            {
+                Console.WriteLine($"[Profile] Challenge exception during load: {ex.Message}");
+                errorMessage = "Additional permissions are required. Please sign in again.";
+                return;
+            }
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"[Profile] Token acquisition error during load: {ex.GetType().Name} - {ex.Message}");
+                errorMessage = $"Authentication error: {ex.Message}";
+                return;
+            }
+            
+            // Add token to request
+            httpClient.DefaultRequestHeaders.Authorization = 
+                new AuthenticationHeaderValue("Bearer", accessToken);
+            
+            // Create URL with select parameter to ensure we get all the fields we need
+            var requestUri = "https://graph.microsoft.com/v1.0/me?$select=id,displayName,givenName,surname,mail,userPrincipalName,mobilePhone,businessPhones,jobTitle,department,officeLocation";
+            
+            // Create request with cache control headers instead of query params
+            var request = new HttpRequestMessage(HttpMethod.Get, requestUri);
+            
+            // Add cache control headers to prevent caching
+            request.Headers.CacheControl = new CacheControlHeaderValue
+            {
+                NoCache = true,
+                NoStore = true,
+                MaxAge = TimeSpan.Zero
+            };
+            
+            var response = await httpClient.SendAsync(request);
+            
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[Profile] Graph API Response: {content}");
+                
+                userProfile = JsonSerializer.Deserialize<UserProfile>(content, new JsonSerializerOptions
+                {
+                    PropertyNameCaseInsensitive = true
+                });
+                
+                // Initialize form model with user data
+                formModel = new ProfileFormModel
+                {
+                    GivenName = userProfile?.GivenName ?? string.Empty,
+                    Surname = userProfile?.Surname ?? string.Empty,
+                    Mail = userProfile?.Mail ?? string.Empty
+                };
+                
+                Console.WriteLine($"[Profile] User data loaded: " +
+                                 $"GivenName={formModel.GivenName}, " +
+                                 $"Surname={formModel.Surname}");
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync();
+                errorMessage = $"Failed to load profile: {response.StatusCode} - {errorContent}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error retrieving user profile: {ex.Message}";
+            Console.WriteLine($"[Profile] Error in LoadUserProfile: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateProfile()
+    {
+        if (formModel == null)
+        {
+            errorMessage = "No profile data to update";
+            return;
+        }
+
+        try
+        {
+            successMessage = null;
+            errorMessage = null;
+
+            // Use specific permission needed for profile updates
+            string[] scopes = { "User.ReadWrite" };
+            
+            // Create HTTP client for Graph API
+            var httpClient = HttpClientFactory.CreateClient();
+            
+            // Get access token for Graph API with proper error handling
+            string accessToken;
+            try
+            {
+                accessToken = await TokenAcquisition.GetAccessTokenForUserAsync(scopes);
+                Console.WriteLine("[Profile] Successfully acquired token for Graph API");
+            }
+            catch (MicrosoftIdentityWebChallengeUserException ex)
+            {
+                Console.WriteLine($"[Profile] Challenge exception: {ex.Message}");
+                errorMessage = "Additional permissions are required. Please sign in again.";
+                return;
+            }
+            catch (Exception ex) 
+            {
+                Console.WriteLine($"[Profile] Token acquisition error: {ex.GetType().Name} - {ex.Message}");
+                errorMessage = $"Authentication error: {ex.Message}";
+                return;
+            }
+            
+            // Add auth header to request
+            httpClient.DefaultRequestHeaders.Authorization = 
+                new AuthenticationHeaderValue("Bearer", accessToken);
+                
+            // Add required headers
+            httpClient.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
+            
+            // Add Prefer header to get back representation
+            httpClient.DefaultRequestHeaders.Add("Prefer", "return=representation");
+            
+            // Create the update data object - only include fields that CIAM allows to be updated
+            var updateData = new Dictionary<string, object?>
+            {
+                ["givenName"] = formModel.GivenName,
+                ["surname"] = formModel.Surname
+                // Note: mobilePhone and businessPhones are not included as CIAM doesn't allow updating them
+            };
+            
+            Console.WriteLine($"[Profile] Only updating allowed fields: givenName='{formModel.GivenName}', surname='{formModel.Surname}'");
+            
+            // Serialize to JSON
+            var jsonPayload = JsonSerializer.Serialize(updateData, new JsonSerializerOptions 
+            { 
+                PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+                WriteIndented = true 
+            });
+            
+            Console.WriteLine($"[Profile] Update payload: {jsonPayload}");
+            
+            // Create content from JSON string
+            var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+            
+            // URL for update request
+            var requestUrl = "https://graph.microsoft.com/v1.0/me";
+            
+            // Log what we're about to do
+            Console.WriteLine($"[Profile] Sending PATCH to: {requestUrl}");
+            Console.WriteLine($"[Profile] Token: {accessToken.Substring(0, Math.Min(20, accessToken.Length))}...");
+            Console.WriteLine($"[Profile] Headers: {string.Join(", ", httpClient.DefaultRequestHeaders.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
+            
+            try 
+            {
+                // Create and send the request - using HttpClient.PatchAsync directly
+                var response = await httpClient.PatchAsync(requestUrl, content);
+                
+                // Process the response
+                var responseContent = await response.Content.ReadAsStringAsync();
+                Console.WriteLine($"[Profile] Response Status: {response.StatusCode} ({(int)response.StatusCode})");
+                Console.WriteLine($"[Profile] Response Headers: {string.Join(", ", response.Headers.Select(h => $"{h.Key}: {string.Join(", ", h.Value)}"))}");
+                Console.WriteLine($"[Profile] Response Content: {responseContent}");
+                
+                if (response.IsSuccessStatusCode)
+                {
+                    // If we get a success status code, we know the update was accepted
+                    Console.WriteLine($"[Profile] Update accepted with status code: {response.StatusCode}");
+                    
+                    // Wait a moment to ensure changes are propagated in Microsoft's systems
+                    await Task.Delay(1000);
+                    
+                    // Refresh the profile data from the server
+                    await LoadUserProfile();
+                    
+                    // Set success message
+                    successMessage = "Profile updated successfully!";
+                    
+                    // Force UI refresh
+                    StateHasChanged();
+                }
+                else
+                {
+                    errorMessage = $"Failed to update profile: {response.StatusCode}";
+                    Console.WriteLine($"[Profile] Error updating profile: {response.StatusCode} - {responseContent}");
+                    
+                    // Try to parse the error response if it's JSON
+                    try
+                    {
+                        var errorJson = JsonSerializer.Deserialize<JsonElement>(responseContent);
+                        if (errorJson.TryGetProperty("error", out var errorObj))
+                        {
+                            if (errorObj.TryGetProperty("message", out var errorMsg))
+                            {
+                                Console.WriteLine($"[Profile] Error message from API: {errorMsg.GetString()}");
+                                errorMessage = $"API Error: {errorMsg.GetString()}";
+                            }
+                        }
+                    }
+                    catch
+                    {
+                        // Couldn't parse error JSON, just log the raw content
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                errorMessage = $"Error sending update request: {ex.Message}";
+                Console.WriteLine($"[Profile] Exception during update: {ex.Message}");
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error updating profile: {ex.Message}";
+            Console.WriteLine($"[Profile] Error in UpdateProfile: {ex.Message}");
+        }
+    }
+}
