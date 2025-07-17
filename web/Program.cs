@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Components.Server;
 using web.Components;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Components.Server.ProtectedBrowserStorage;
+using Microsoft.AspNetCore.HttpOverrides;
 
 var builder = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder(args);
 
