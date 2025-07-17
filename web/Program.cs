@@ -38,6 +38,12 @@ builder.Services.AddScoped<AuthenticationStateProvider, ServerAuthenticationStat
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders =
+        ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+});
+
 builder.Services.AddHttpClient();
 
 builder.Services.AddControllersWithViews()
@@ -51,20 +57,13 @@ builder.Services.AddMicrosoftIdentityConsentHandler();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-if (!app.Environment.IsDevelopment())
-{
-    app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
-}
+app.UseExceptionHandler("/Error", createScopeForErrors: true);
+// For compatibility with reverse proxies and load balancers like Azure Container Apps
+app.UseForwardedHeaders();
+app.UseHsts();
 
 app.UseHttpsRedirection();
 app.UseStaticFiles();
-
-// For compatibility with reverse proxies and load balancers like Azure Container Apps
-app.UseForwardedHeaders(new ForwardedHeadersOptions
-{
-    ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto
-});
 
 app.UseAuthentication();
 app.UseAuthorization();
