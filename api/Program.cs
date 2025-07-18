@@ -76,7 +76,17 @@ using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
     var context = services.GetRequiredService<BookDb>();
-    DbInitializer.Initialize(context);
+    
+    try
+    {
+        // Initialize with seed data
+        DbInitializer.Initialize(context);
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"An error occurred while seeding the database: {ex.Message}");
+        Console.WriteLine(ex.ToString());
+    }
 }
 
 // Define the routes, PREFIX_URL_PATH should start with a / if defined
