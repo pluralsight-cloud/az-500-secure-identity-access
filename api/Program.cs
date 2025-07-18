@@ -48,10 +48,12 @@ if (!string.IsNullOrEmpty(Environment.GetEnvironmentVariable("APPLICATIONINSIGHT
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
 if (string.IsNullOrEmpty(connectionString))
 {
+    Console.WriteLine("No connection string found, using in-memory database.");
     builder.Services.AddDbContext<BookDb>(opt => opt.UseInMemoryDatabase("BookList"));
 }
 else
 {
+    Console.WriteLine($"Using SQL Server with connection string: {connectionString}");
     builder.Services.AddDbContext<BookDb>(opt => opt.UseSqlServer(connectionString));
 }
 
