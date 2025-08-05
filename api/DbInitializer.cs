@@ -11,39 +11,15 @@ public static class DbInitializer
         {
             Console.WriteLine("Starting database initialization...");
 
-            // Check if there are any books already
-            try {
-                if (context.Books.Any())
-                {
-                    Console.WriteLine("Database already seeded with books.");
-                    return;
-                }
-            } catch (Exception ex) {
-                Console.WriteLine($"Error checking for existing books: {ex.Message}");
-                // Continue to try to create table and add books
-            }
+            // Ensure the database is created
+            context.Database.EnsureCreated();
+            Console.WriteLine("Database checked/created.");
 
-            // Try to create the table if needed
-            try {
-                context.Database.ExecuteSqlRaw(@"
-                    IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'Books')
-                    BEGIN
-                        CREATE TABLE dbo.Books (
-                            Id int PRIMARY KEY,
-                            Title nvarchar(255) NULL,
-                            Author nvarchar(255) NULL,
-                            Image nvarchar(255) NULL,
-                            Published int NOT NULL,
-                            Price float NOT NULL,
-                            Synopsis nvarchar(max) NULL
-                        )
-                    END
-                ");
-                Console.WriteLine("Table Books checked/created.");
-            }
-            catch (Exception ex) {
-                Console.WriteLine($"Error checking/creating table: {ex.Message}");
-                // Continue anyway - the table might already exist
+            // Check if there are any books already - only proceed if database is empty
+            if (context.Books.Any())
+            {
+                Console.WriteLine("Database already seeded with books.");
+                return;
             }
 
             var books = new Book[]
