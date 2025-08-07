@@ -1,6 +1,10 @@
 using System.Text.Json.Serialization;
+using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 public class Book
 {
+    [Key]
+    [DatabaseGenerated(DatabaseGeneratedOption.Identity)]
     [JsonPropertyName("id")]
     public int Id { get; set; }
 
