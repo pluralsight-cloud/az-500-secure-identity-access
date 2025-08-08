@@ -11,7 +11,7 @@ public class BookDb : DbContext
     {
         modelBuilder.Entity<Book>(entity =>
         {
-            entity.Property(e => e.Id).ValueGeneratedNever();
+            entity.Property(e => e.Id).ValueGeneratedOnAdd();
         });
     }
 }
